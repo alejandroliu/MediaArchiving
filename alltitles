@@ -1,0 +1,99 @@
+#!/bin/sh
+#
+# Usage:
+# [option_vars] sh alltitles [chapter]
+#
+# Option vars:
+#
+# drive=[device-path] defaults to /dev/sr0
+# titles="01 02 03 ..." defaults to all titles in DVD (as listed by
+# lsdvd)
+# You can also specify titles as:
+#
+# title="01,1-4 01,5-8"
+#
+# This will create two files, one with track 1, chaptes one trough
+# four (inclusive)
+# and another one with track 1, chapters five through eigth (inclusive)
+#
+# chapter: Leave blank for all chapters, otherwise:
+#
+# -chapter <start_chapter>[-<end_chapter>]
+#
+# Will dump starting from <start_chapter> until <end_chapter>. (or end)
+# If you only want to extract chapter 7 by itsel, use -chapter 7-7
+#
+#
+
+[ -z $drive ] && drive=/dev/sr0
+
+fatal() {
+  echo "$@" 1>&2
+  exit 1
+}
+msg() {
+  echo "$@" 1>&2
+}
+
+is_dvd_ready() {
+  local status=$(udisksctl info -b $drive | grep Size: | sed -e 's/Size://')
+  [ $status -eq 0 ] && return 1
+  return 0
+}
+
+is_mounted() {
+  local status=$( udisksctl info -b $drive | grep MountPoints: | sed -e 's/MountPoints://' | tr -d '  ')
+  [ -z "$status" ] && return 1
+  return 0
+}
+
+get_label() {
+   udisksctl info -b $drive | grep IdLabel: | cut -d: -f2- | sed -e 's/^ *//' -e 's/ *$//'
+}
+trackid() {
+  echo "$1" | sed -e 's/^0*//'
+}
+
+
+msg "Insert DVD..."
+countdown=45
+while [ $countdown -gt 0 ]
+do
+  is_dvd_ready && break
+  sleep 1
+  countdown=$(expr $countdown - 1)
+done
+[ $countdown -eq 0 ] && fatal "Timed-out waiting for DVD to be inserted"
+
+label="$(get_label)"
+if [ -z "$label" ] ; then
+  label=DVD
+  msg "DVD Found: No label"
+else
+  msg "DVD found: \"$label\""
+fi
+ftitles=$(lsdvd $drive | grep '^Title:' | cut -d' ' -f2 | tr -d ,)
+if [ -z "$titles" ] ; then
+  echo Titles: $ftitles
+  titles=$ftitles
+else
+  echo Found: $ftitles
+  echo Force: $titles
+fi
+
+chaps="$*"
+
+for tit in $titles
+do
+  chapters="$chaps"
+  if grep -q , <<<"$tit" ; then
+    chapters="-chapter $(echo "$tit" | cut -d, -f2-)"
+    tit="$(echo "$tit" | cut -d, -f1)"
+  fi
+  trk=$(trackid $tit)
+  name="$(echo $label.$tit$chapters | tr -d ' ')"
+  mplayer dvd://$trk -dvd-device "$drive" -frames 0 -identify > $name.txt
+  mplayer dvd://$trk -dvd-device "$drive" -dumpstream -dumpfile $name.vob $chapters  2>&1 | tee $name.log
+done
+eject
+

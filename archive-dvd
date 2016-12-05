@@ -1,0 +1,74 @@
+#!/bin/sh
+drive=/dev/sr0
+
+fatal() {
+  echo "$@" 1>&2
+  exit 1
+}
+msg() {
+  echo "$@" 1>&2
+}
+
+is_dvd_ready() {
+  local status=$(udisksctl info -b $drive | grep Size: | sed -e 's/Size://')
+  [ -z "$status" ] && return 1
+  [ $status -eq 0 ] && return 1
+  return 0
+}
+
+is_mounted() {
+  local status=$( udisksctl info -b /dev/sr0 | grep MountPoints: | sed -e 's/MountPoints://' | tr -d '  ')
+  [ -z "$status" ] && return 1
+  return 0
+}
+
+msg "Insert DVD..."
+countdown=45
+while [ $countdown -gt 0 ]
+do
+  is_dvd_ready && break
+  sleep 1
+  countdown=$(expr $countdown - 1)
+done
+[ $countdown -eq 0 ] && fatal "Timed-out waiting for DVD to be inserted"
+
+msg "DVD found!"
+if is_mounted ; then
+  msg "DVD is already mounted!"
+  unmount=no
+else
+  sleep 1
+  udisksctl mount -b $drive || fatal "Unable to mount DVD"
+  unmount=yes
+  sleep 1
+fi
+
+output=$(mktemp -p $(pwd) -d)
+vobcopy -o $output -m
+
+if [ $unmount = yes ] ; then
+  (
+    # Run this as a separated thread...
+    sleep 1
+    udisksctl unmount -b $drive || fatal "Unable to unmount DVD"
+    sleep 1
+    eject
+  ) &
+fi
+
+dvdname="$(cd $output && echo *)"
+[ -z "$dvdname" ] \
+  && fatal "Unable to determine DVD name.  Check output directory: $output"
+n=0
+
+isoname="$dvdname.iso"
+while [ -f "$isoname" ]
+do
+  n=$(expr $n + 1)
+  isoname="$dvdname.$n.iso"
+done
+
+mkisofs -V "$dvdname" -dvd-video -udf -o "$isoname" "$output/$dvdname" \
+  && rm -rf "$output"
+
+echo "Created: $isoname"
