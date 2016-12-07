@@ -5,6 +5,12 @@
 
 outputdir=""
 plang="(eng)"
+slang="(eng)"
+
+if [ $# -eq 0 ] ; then
+  echo "Usage: $0 [opts] --out=<output-dir> *.mkv"
+  exit 1
+fi
 
 
 while [ $# -gt 0 ]
@@ -12,6 +18,13 @@ do
   case "$1" in
     --lang=*)
       plang="(${1#--lang=})"
+      slang="$plang"
+      ;;
+    --slang=*)
+      slang="(${1#--slang=})"
+      ;;
+    --alang=*)
+      plang="(${1#--alang=})"
       ;;
     --out=*)
 			outputdir="${1#--out=}"
@@ -29,7 +42,7 @@ do
 	shift
 done
 
-echo "Using $plang"
+echo "Using $plang/$slang"
 if [ -z "$outputdir" ] ; then
 	echo "Must specify --out=<dir>"
   exit 1
@@ -43,6 +56,7 @@ get_map_options() {
   any=()
   audio=()
   subs=()
+  video=()
 	
 	while read stream type ignore
 	do
@@ -50,7 +64,11 @@ get_map_options() {
 	  lang=$(echo $stream | sed 's/^[:0-9]*//')
 	  stream=$(echo $stream | tr -dc :0-9)
 	  if [ -z "$lang" ] ; then
-			any+=( "-map $stream" )
+	    if [ "$type" = "Video:" ] ; then
+			  video+=( "-map $stream" )
+			else
+				any+=( "-map $stream" )
+			fi
 			continue
 		fi
 	  
@@ -63,19 +81,23 @@ get_map_options() {
 				fi
 				;;
 	    Subtitle:)
-	      if [ "$lang" = "$plang" ] ; then
+	      if [ "$lang" = "$slang" ] ; then
 	        subs=( "-map $stream" "${subs[@]}" )
 	      else
 					subs+=( "-map $stream" )
 				fi
 				;;
+			Video:)
+			  video+=( "-map $stream" )
+			  ;;
 			*)
 			  any+=( "-map $stream" )
 		esac
 	done
-	echo "${any[@]}"
+	echo "${video[@]}"
 	echo "${audio[@]}"
 	echo "${subs[@]}"
+	echo "${any[@]}"
 }
 
 process_file() {
