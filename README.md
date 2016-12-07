@@ -7,6 +7,7 @@ Scripts:
 - archive-dvd : Create an iso image from a DVD.
 - alltitles : Extract titles/chapters from a DVD.
 - auto.sh : Used to transcode titles/chapters extracted by `alltitles`
+- remux.sh : Re-arranges MKV streams
 
 ## archive-dvd
 
@@ -54,6 +55,11 @@ Options:
 * --copy|-c : Do only copy
 * --interlace|-i : Force interlace filter
 * --no-interlace|+i : Disables interlace filter
+
+## remux.sh
+
+Re-arranges MKV streams so that the preferred language `(eng)` is
+first so it is used as default.
 
 ## Dependancies
 
